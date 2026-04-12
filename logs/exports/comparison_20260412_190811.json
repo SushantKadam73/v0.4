@@ -1,0 +1,16 @@
+{
+  "timestamp": "2026-04-12T19:08:11.964871Z",
+  "input_name": "synthetic_150kb.bin",
+  "input_size_kb": 150.0,
+  "rows": [
+    {
+      "Algorithm": "AES-256",
+      "Enc Time (ms)": 0.612,
+      "Dec Time (ms)": 0.375,
+      "Enc RAM (KB)": 454.643,
+      "Dec RAM (KB)": 454.112,
+      "Output Size (KB)": 150.031,
+      "Sig Size (bits)": null
+    }
+  ]
+}

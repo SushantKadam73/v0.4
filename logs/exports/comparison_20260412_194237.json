@@ -1,0 +1,47 @@
+{
+  "timestamp": "2026-04-12T19:42:37.933962Z",
+  "input_name": "2785892_Jile_E0_Completion_Certificate (1).pdf",
+  "input_size_kb": 250.694,
+  "rows": [
+    {
+      "Algorithm": "AES-256",
+      "Status": "OK",
+      "Enc Time (ms)": 1.021,
+      "Dec Time (ms)": 0.652,
+      "Enc RAM (KB)": 760.955,
+      "Dec RAM (KB)": 755.233,
+      "Output Size (KB)": 250.719,
+      "Sig Size (bits)": null
+    },
+    {
+      "Algorithm": "ChaCha20-256",
+      "Status": "OK",
+      "Enc Time (ms)": 0.237,
+      "Dec Time (ms)": 0.196,
+      "Enc RAM (KB)": 501.962,
+      "Dec RAM (KB)": 501.931,
+      "Output Size (KB)": 250.71,
+      "Sig Size (bits)": null
+    },
+    {
+      "Algorithm": "Hybrid + RSA",
+      "Status": "OK",
+      "Enc Time (ms)": 37.318,
+      "Dec Time (ms)": 0.938,
+      "Enc RAM (KB)": 882.705,
+      "Dec RAM (KB)": 756.001,
+      "Output Size (KB)": 250.996,
+      "Sig Size (bits)": 2048
+    },
+    {
+      "Algorithm": "Hybrid + ECDSA",
+      "Status": "OK",
+      "Enc Time (ms)": 1.118,
+      "Dec Time (ms)": 0.823,
+      "Enc RAM (KB)": 878.32,
+      "Dec RAM (KB)": 752.977,
+      "Output Size (KB)": 250.815,
+      "Sig Size (bits)": 568
+    }
+  ]
+}

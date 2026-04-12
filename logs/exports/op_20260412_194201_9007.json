@@ -1,0 +1,43 @@
+{
+  "id": "op_20260412_194201_9007",
+  "timestamp": "2026-04-12T19:42:01Z",
+  "operation": "decrypt",
+  "algorithm": "aes_256",
+  "input": {
+    "filename": "2785892_Jile_E0_Completion_Certificate (1).pdf.enc",
+    "extension": ".enc",
+    "mime_type": "application/octet-stream",
+    "size_kb": 250.719,
+    "entropy_bits_per_byte": 7.9994
+  },
+  "output": {
+    "filename": "2785892_Jile_E0_Completion_Certificate (1).pdf",
+    "extension": ".pdf",
+    "mime_type": "application/pdf",
+    "size_kb": 250.694,
+    "entropy_bits_per_byte": 7.9886
+  },
+  "performance": {
+    "enc_time_ms": 0.735,
+    "dec_time_ms": 1.058,
+    "enc_ram_kb": 755.076,
+    "dec_ram_kb": 760.814
+  },
+  "keys": {
+    "aes_key_size_bits": 256,
+    "chacha20_key_size_bits": 256,
+    "signature_algorithm": null,
+    "signature_size_bits": 0,
+    "key_hex_preview": "generated_runtime"
+  },
+  "security": {
+    "entropy_stages": {
+      "plaintext": 7.9994,
+      "ciphertext_aes_half": 7.9986,
+      "ciphertext_chacha20_half": 7.9985,
+      "final_combined_ciphertext": 7.9886
+    },
+    "signature_valid": true,
+    "avalanche_bit_change_pct": null
+  }
+}

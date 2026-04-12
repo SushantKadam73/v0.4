@@ -1,0 +1,47 @@
+{
+  "timestamp": "2026-04-12T19:39:30.088832Z",
+  "input_name": "Screenshot (1)-darkhorse73.png",
+  "input_size_kb": 790.192,
+  "rows": [
+    {
+      "Algorithm": "AES-256",
+      "Status": "OK",
+      "Enc Time (ms)": 2.376,
+      "Dec Time (ms)": 1.646,
+      "Enc RAM (KB)": 2377.518,
+      "Dec RAM (KB)": 2371.589,
+      "Output Size (KB)": 790.219,
+      "Sig Size (bits)": null
+    },
+    {
+      "Algorithm": "ChaCha20-256",
+      "Status": "OK",
+      "Enc Time (ms)": 0.746,
+      "Dec Time (ms)": 0.503,
+      "Enc RAM (KB)": 1584.26,
+      "Dec RAM (KB)": 1581.146,
+      "Output Size (KB)": 790.208,
+      "Sig Size (bits)": null
+    },
+    {
+      "Algorithm": "Hybrid + RSA",
+      "Status": "OK",
+      "Enc Time (ms)": 36.851,
+      "Dec Time (ms)": 1.906,
+      "Enc RAM (KB)": 2770.901,
+      "Dec RAM (KB)": 2374.512,
+      "Output Size (KB)": 790.495,
+      "Sig Size (bits)": 2048
+    },
+    {
+      "Algorithm": "Hybrid + ECDSA",
+      "Status": "OK",
+      "Enc Time (ms)": 9.914,
+      "Dec Time (ms)": 1.751,
+      "Enc RAM (KB)": 3025.592,
+      "Dec RAM (KB)": 2371.487,
+      "Output Size (KB)": 790.314,
+      "Sig Size (bits)": 568
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+[app]
+name = "CryptoLab"
+max_upload_mb = 200
+log_path = "logs/operations.jsonl"
+export_dir = "logs/exports"
+
+[ui]
+show_json_preview = true
+hex_preview_bytes = 256

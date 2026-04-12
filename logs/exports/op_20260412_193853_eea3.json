@@ -1,0 +1,43 @@
+{
+  "id": "op_20260412_193853_eea3",
+  "timestamp": "2026-04-12T19:38:53Z",
+  "operation": "encrypt",
+  "algorithm": "aes_256",
+  "input": {
+    "filename": "Screenshot 2026-03-28 131522.png",
+    "extension": ".png",
+    "mime_type": "image/png",
+    "size_kb": 54.247,
+    "entropy_bits_per_byte": 7.7069
+  },
+  "output": {
+    "filename": "Screenshot 2026-03-28 131522.png.enc",
+    "extension": ".enc",
+    "mime_type": "application/octet-stream",
+    "size_kb": 54.266,
+    "entropy_bits_per_byte": 7.9963
+  },
+  "performance": {
+    "enc_time_ms": 2.954,
+    "dec_time_ms": 0.197,
+    "enc_ram_kb": 188.604,
+    "dec_ram_kb": 164.534
+  },
+  "keys": {
+    "aes_key_size_bits": 256,
+    "chacha20_key_size_bits": 256,
+    "signature_algorithm": null,
+    "signature_size_bits": 0,
+    "key_hex_preview": "generated_runtime"
+  },
+  "security": {
+    "entropy_stages": {
+      "plaintext": 7.7069,
+      "ciphertext_aes_half": 7.6605,
+      "ciphertext_chacha20_half": 7.7411,
+      "final_combined_ciphertext": 7.9963
+    },
+    "signature_valid": true,
+    "avalanche_bit_change_pct": null
+  }
+}
