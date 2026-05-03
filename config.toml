@@ -1,9 +1,25 @@
 [app]
 name = "CryptoLab"
+version = "0.5"
 max_upload_mb = 200
-log_path = "logs/operations.jsonl"
+log_path = "logs/operations.csv"
 export_dir = "logs/exports"
 
+[defaults]
+iterations = 1
+max_iterations = 10
+sym_key_size_bits = 256
+sig_key_size = 2048
+ecdsa_curve = "P-256"
+
+[algorithms]
+symmetric = ["aes_gcm", "chacha20_poly1305", "hybrid"]
+signatures = ["RSA", "ECDSA"]
+aes_key_sizes = [128, 192, 256]
+rsa_key_sizes = [2048, 3072, 4096]
+ecdsa_curves = ["P-256", "P-384", "P-521"]
+
 [ui]
-show_json_preview = true
 hex_preview_bytes = 256
+show_hex_viewer = true
+show_avalanche_heatmap = true

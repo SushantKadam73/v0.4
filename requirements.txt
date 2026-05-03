@@ -3,4 +3,5 @@ pycryptodome
 cryptography
 plotly
 pandas
-python-magic
+psutil
+scipy
