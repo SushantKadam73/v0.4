@@ -1,4 +1,5 @@
 """CryptoLab v0.5 — Hybrid Encryption Research Dashboard."""
+
 from __future__ import annotations
 
 import streamlit as st
@@ -11,7 +12,9 @@ st.set_page_config(
 )
 
 st.title("🔐 CryptoLab — Cryptographic Analysis Dashboard")
-st.caption("v0.5 · Local research tool · All operations logged to `logs/operations.csv`")
+st.caption(
+    "v0.5 · Local research tool · All operations logged to `logs/operations.jsonl`"
+)
 
 st.markdown("""
 ## Welcome to CryptoLab
@@ -42,7 +45,7 @@ Use the **sidebar** to navigate:
 | 192-bit | 192-bit key | — | 7680-bit | P-384 |
 | 256-bit | 256-bit key | 256-bit (fixed) | 15360-bit* | P-521 |
 
-*\*RSA-15360 is impractical; RSA-4096 is the practical maximum.*
+*RSA-15360 is impractical; RSA-4096 is the practical maximum.*
 """)
 
 st.info("🔒 Fully offline — no network access. All data stays on your machine.")

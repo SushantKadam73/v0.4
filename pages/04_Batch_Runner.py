@@ -1,8 +1,9 @@
 """Page 4 — Batch Runner
 
 Upload multiple files, select algorithm combinations, run automated benchmarks.
-All results are logged to CSV with a shared batch_id.
+All results are logged to JSONL with a shared batch_id.
 """
+
 from __future__ import annotations
 
 import os
@@ -11,7 +12,11 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
-from crypto.key_generator import generate_ecdsa_keypair, generate_rsa_keypair, generate_symmetric_key
+from crypto.key_generator import (
+    generate_ecdsa_keypair,
+    generate_rsa_keypair,
+    generate_symmetric_key,
+)
 from lab_core import (
     ALGORITHM_DISPLAY,
     EncryptionConfig,
@@ -48,8 +53,17 @@ with col_a:
             ["10 KB", "50 KB", "100 KB", "500 KB", "1 MB"],
             default=["50 KB"],
         )
-        size_map = {"10 KB": 10, "50 KB": 50, "100 KB": 100, "500 KB": 500, "1 MB": 1024}
-        synth_sizes = [(f"synthetic_{size_map[s]}kb.bin", size_map[s] * 1024) for s in synth_options]
+        size_map = {
+            "10 KB": 10,
+            "50 KB": 50,
+            "100 KB": 100,
+            "500 KB": 500,
+            "1 MB": 1024,
+        }
+        synth_sizes = [
+            (f"synthetic_{size_map[s]}kb.bin", size_map[s] * 1024)
+            for s in synth_options
+        ]
 
 with col_b:
     st.subheader("Algorithms")
@@ -83,12 +97,18 @@ for algo, bits, enabled in [
         ("ECDSA", "P-256", sig_ecdsa),
     ]:
         if sig_enabled:
-            combos.append({"algorithm": algo, "bits": bits, "sig": sig, "sig_param": sig_param})
+            combos.append(
+                {"algorithm": algo, "bits": bits, "sig": sig, "sig_param": sig_param}
+            )
 
 total_files = len(uploaded_files) + len(synth_sizes)
 total_runs = total_files * len(combos) * iterations
 
-st.metric("Total Runs", f"{total_runs}", help=f"{total_files} files × {len(combos)} combos × {iterations} iterations")
+st.metric(
+    "Total Runs",
+    f"{total_runs}",
+    help=f"{total_files} files × {len(combos)} combos × {iterations} iterations",
+)
 
 if total_runs == 0:
     st.info("Select at least one file and one algorithm combination.")
@@ -128,8 +148,16 @@ if st.button("▶ Start Batch", type="primary", disabled=total_runs == 0):
 
             aes_key = keys[f"aes_{bits}" if algo != "chacha20_poly1305" else "aes_256"]
             chacha_key = keys["chacha"]
-            priv = keys["rsa_priv"] if sig == "RSA" else (keys["ecdsa_priv"] if sig == "ECDSA" else None)
-            pub = keys["rsa_pub"] if sig == "RSA" else (keys["ecdsa_pub"] if sig == "ECDSA" else None)
+            priv = (
+                keys["rsa_priv"]
+                if sig == "RSA"
+                else (keys["ecdsa_priv"] if sig == "ECDSA" else None)
+            )
+            pub = (
+                keys["rsa_pub"]
+                if sig == "RSA"
+                else (keys["ecdsa_pub"] if sig == "ECDSA" else None)
+            )
 
             config = EncryptionConfig(
                 algorithm=algo,
@@ -148,7 +176,11 @@ if st.button("▶ Start Batch", type="primary", disabled=total_runs == 0):
                     text=f"[{run_count}/{total_runs}] {fname} | {ALGORITHM_DISPLAY[algo]} | iter {it}",
                 )
 
-                label = f"{ALGORITHM_DISPLAY[algo]} ({bits}b" + (f" +{sig}" if sig else "") + ")"
+                label = (
+                    f"{ALGORITHM_DISPLAY[algo]} ({bits}b"
+                    + (f" +{sig}" if sig else "")
+                    + ")"
+                )
                 row_dict = {
                     "file": fname,
                     "algorithm": ALGORITHM_DISPLAY[algo],
@@ -159,7 +191,9 @@ if st.button("▶ Start Batch", type="primary", disabled=total_runs == 0):
                     "dec_time_ms": round(result.dec_time_ms, 3),
                     "enc_ram_kb": round(result.enc_ram_kb, 2),
                     "enc_throughput_kbps": round(result.enc_throughput_kbps, 1),
-                    "avalanche_pct": round(result.avalanche.bit_change_pct, 2) if result.avalanche else None,
+                    "avalanche_pct": round(result.avalanche.bit_change_pct, 2)
+                    if result.avalanche
+                    else None,
                     "final_entropy": round(result.entropy_final, 4),
                     "expansion_pct": round(result.ciphertext_expansion_pct, 4),
                     "status": "Error: " + result.error if result.error else "OK",
@@ -167,7 +201,9 @@ if st.button("▶ Start Batch", type="primary", disabled=total_runs == 0):
                 rows_out.append(row_dict)
 
                 if not result.error:
-                    build_and_log_row(config, fname, fdata, fname + ".enc", result, bid, it)
+                    build_and_log_row(
+                        config, fname, fdata, fname + ".enc", result, bid, it
+                    )
 
     progress.empty()
     st.success(f"✅ Batch complete! {run_count} runs. Batch ID: `{bid}`")
@@ -191,24 +227,50 @@ if "last_batch_df" in st.session_state:
     if not ok_df.empty:
         tab1, tab2, tab3 = st.tabs(["⚡ Timing", "💾 Throughput", "💥 Avalanche"])
         with tab1:
-            fig = px.box(ok_df, x="algorithm", y="enc_time_ms", color="signature",
-                         title="Encryption Time Distribution per Algorithm")
-            fig.update_layout(plot_bgcolor="#0e1117", paper_bgcolor="#0e1117", font_color="white")
+            fig = px.box(
+                ok_df,
+                x="algorithm",
+                y="enc_time_ms",
+                color="signature",
+                title="Encryption Time Distribution per Algorithm",
+            )
+            fig.update_layout(
+                plot_bgcolor="#0e1117", paper_bgcolor="#0e1117", font_color="white"
+            )
             st.plotly_chart(fig, use_container_width=True)
 
         with tab2:
-            fig = px.box(ok_df, x="algorithm", y="enc_throughput_kbps", color="key_size",
-                         title="Throughput Distribution per Algorithm")
-            fig.update_layout(plot_bgcolor="#0e1117", paper_bgcolor="#0e1117", font_color="white")
+            fig = px.box(
+                ok_df,
+                x="algorithm",
+                y="enc_throughput_kbps",
+                color="key_size",
+                title="Throughput Distribution per Algorithm",
+            )
+            fig.update_layout(
+                plot_bgcolor="#0e1117", paper_bgcolor="#0e1117", font_color="white"
+            )
             st.plotly_chart(fig, use_container_width=True)
 
         with tab3:
             ava_df = ok_df.dropna(subset=["avalanche_pct"])
             if not ava_df.empty:
-                fig = px.box(ava_df, x="algorithm", y="avalanche_pct", color="signature",
-                             title="Avalanche Effect Distribution (ideal = 50%)")
-                fig.add_hline(y=50, line_dash="dash", line_color="green", annotation_text="Ideal 50%")
-                fig.update_layout(plot_bgcolor="#0e1117", paper_bgcolor="#0e1117", font_color="white")
+                fig = px.box(
+                    ava_df,
+                    x="algorithm",
+                    y="avalanche_pct",
+                    color="signature",
+                    title="Avalanche Effect Distribution (ideal = 50%)",
+                )
+                fig.add_hline(
+                    y=50,
+                    line_dash="dash",
+                    line_color="green",
+                    annotation_text="Ideal 50%",
+                )
+                fig.update_layout(
+                    plot_bgcolor="#0e1117", paper_bgcolor="#0e1117", font_color="white"
+                )
                 st.plotly_chart(fig, use_container_width=True)
 
     st.download_button(

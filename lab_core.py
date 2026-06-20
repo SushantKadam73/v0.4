@@ -3,23 +3,30 @@
 Provides EncryptionConfig, OperationResult, and the master run_operation()
 function that wires together all crypto engines, analysis, and logging.
 """
+
 from __future__ import annotations
 
+import hashlib
 import mimetypes
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from analysis.avalanche import AvalancheResult, compute_avalanche
-from analysis.entropy import byte_frequency_std_dev as _byte_freq_std_dev, shannon_entropy
-from analysis.performance import MultiIterationMetrics, OperationMetrics, measure_multi, measure_operation
-from analysis.security_metrics import chi_squared_uniformity, ciphertext_expansion_pct, key_entropy_score
+from analysis.entropy import byte_frequency_std_dev as _byte_freq_std_dev
+from analysis.entropy import shannon_entropy
+from analysis.performance import measure_multi, measure_operation, memory_backend
+from analysis.security_metrics import (
+    chi_squared_uniformity,
+    ciphertext_expansion_pct,
+    key_entropy_score,
+)
 from crypto import aes_gcm_engine, chacha20_poly_engine, hybrid_engine
 from crypto.key_generator import generate_symmetric_key
-from crypto.signature import signature_key_size_bits
-from storage.log_store import CSV_COLUMNS, append_row
+from crypto.signature import sign, signature_key_size_bits, verify
+from storage.log_store import append_row
 
 # ──────────────────────────────────────────────
 # NIST Security Equivalence Table
@@ -42,11 +49,11 @@ ALGORITHM_DISPLAY = {
 # ──────────────────────────────────────────────
 @dataclass
 class EncryptionConfig:
-    algorithm: str               # "aes_gcm" | "chacha20_poly1305" | "hybrid"
+    algorithm: str  # "aes_gcm" | "chacha20_poly1305" | "hybrid"
     sym_key_size_bits: int = 256  # 128/192/256 (ChaCha20 forced to 256)
     sig_algorithm: str | None = None  # None | "RSA" | "ECDSA"
     sig_key_param: str = "2048"  # RSA size or ECDSA curve name
-    operation: str = "both"      # "encrypt" | "decrypt" | "both"
+    operation: str = "both"  # "encrypt" | "decrypt" | "both"
     iterations: int = 1
 
 
@@ -95,6 +102,12 @@ class OperationResult:
     sig_valid: bool = True
     sig_bytes: bytes = b""
     sig_size_bits: int = 0
+
+    # Hash authenticity
+    plaintext_sha256: str = ""
+    ciphertext_sha256: str = ""
+    decrypted_sha256: str = ""
+    hash_match: bool | None = None
 
     # Key entropies
     aes_key_entropy: float = 0.0
@@ -148,8 +161,17 @@ def hex_preview(data: bytes, max_bytes: int = 256) -> str:
     return data[:max_bytes].hex()
 
 
-def _get_encrypt_fn(algorithm: str, aes_key: bytes, chacha_key: bytes,
-                    private_pem: bytes | None, sig_algorithm: str | None):
+def sha256_hex(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest() if data else ""
+
+
+def _get_encrypt_fn(
+    algorithm: str,
+    aes_key: bytes,
+    chacha_key: bytes,
+    private_pem: bytes | None,
+    sig_algorithm: str | None,
+):
     """Return a simple (data, key) -> ciphertext lambda for avalanche computation."""
     if algorithm == "aes_gcm":
         return lambda d, k: aes_gcm_engine.encrypt(d, k)
@@ -172,6 +194,7 @@ def run_operation(
     chacha_key: bytes,
     private_pem: bytes | None = None,
     public_pem: bytes | None = None,
+    detached_signature: bytes | None = None,
 ) -> OperationResult:
     """Run encrypt/decrypt and compute all analysis metrics.
 
@@ -188,24 +211,37 @@ def run_operation(
     result.chacha_key_entropy = round(key_entropy_score(chacha_key), 4)
 
     try:
+        ciphertext_input = data
+
         # ── ENCRYPT ──────────────────────────────
-        if config.iterations > 1:
+        if config.operation in {"encrypt", "both"} and config.iterations > 1:
             # Multi-iteration: use the last ciphertext as the actual output
             if config.algorithm == "aes_gcm":
                 enc_multi = measure_multi(
-                    aes_gcm_engine.encrypt, data, aes_key,
-                    iterations=config.iterations, input_size_bytes=len(data)
+                    aes_gcm_engine.encrypt,
+                    data,
+                    aes_key,
+                    iterations=config.iterations,
+                    input_size_bytes=len(data),
                 )
             elif config.algorithm == "chacha20_poly1305":
                 enc_multi = measure_multi(
-                    chacha20_poly_engine.encrypt, data, chacha_key,
-                    iterations=config.iterations, input_size_bytes=len(data)
+                    chacha20_poly_engine.encrypt,
+                    data,
+                    chacha_key,
+                    iterations=config.iterations,
+                    input_size_bytes=len(data),
                 )
             else:  # hybrid
                 enc_multi = measure_multi(
-                    hybrid_engine.encrypt, data, aes_key, chacha_key,
-                    private_pem, config.sig_algorithm,
-                    iterations=config.iterations, input_size_bytes=len(data)
+                    hybrid_engine.encrypt,
+                    data,
+                    aes_key,
+                    chacha_key,
+                    private_pem,
+                    config.sig_algorithm,
+                    iterations=config.iterations,
+                    input_size_bytes=len(data),
                 )
             result.ciphertext = enc_multi.results[-1]
             result.enc_time_ms = enc_multi.mean_ms
@@ -217,46 +253,115 @@ def run_operation(
             result.enc_std_ram_kb = enc_multi.std_ram_kb
             result.enc_mean_throughput = enc_multi.mean_throughput_kbps
             result.enc_std_throughput = enc_multi.std_throughput_kbps
-        else:
+        elif config.operation in {"encrypt", "both"}:
             if config.algorithm == "aes_gcm":
-                enc_m = measure_operation(aes_gcm_engine.encrypt, data, aes_key, input_size_bytes=len(data))
+                enc_m = measure_operation(
+                    aes_gcm_engine.encrypt, data, aes_key, input_size_bytes=len(data)
+                )
             elif config.algorithm == "chacha20_poly1305":
-                enc_m = measure_operation(chacha20_poly_engine.encrypt, data, chacha_key, input_size_bytes=len(data))
+                enc_m = measure_operation(
+                    chacha20_poly_engine.encrypt,
+                    data,
+                    chacha_key,
+                    input_size_bytes=len(data),
+                )
             else:  # hybrid
                 enc_m = measure_operation(
-                    hybrid_engine.encrypt, data, aes_key, chacha_key,
-                    private_pem, config.sig_algorithm, input_size_bytes=len(data)
+                    hybrid_engine.encrypt,
+                    data,
+                    aes_key,
+                    chacha_key,
+                    private_pem,
+                    config.sig_algorithm,
+                    input_size_bytes=len(data),
                 )
             result.ciphertext = enc_m.result
             result.enc_time_ms = enc_m.elapsed_ms
             result.enc_ram_kb = enc_m.ram_kb
             result.enc_throughput_kbps = enc_m.throughput_kbps
+        else:
+            result.ciphertext = ciphertext_input
+
+        if config.operation in {"encrypt", "both"}:
+            result.plaintext_sha256 = sha256_hex(data)
+            result.ciphertext_sha256 = sha256_hex(result.ciphertext)
+        else:
+            result.ciphertext_sha256 = sha256_hex(result.ciphertext)
+
+        if (
+            config.sig_algorithm
+            and config.algorithm != "hybrid"
+            and config.operation in {"encrypt", "both"}
+        ):
+            if not private_pem:
+                raise ValueError("A private key is required to sign the ciphertext")
+            result.sig_bytes = sign(
+                result.ciphertext, private_pem, config.sig_algorithm
+            )
+            result.sig_size_bits = len(result.sig_bytes) * 8
 
         # ── DECRYPT ──────────────────────────────
         if config.operation in {"decrypt", "both"}:
+            active_signature = result.sig_bytes or detached_signature or b""
             if config.algorithm == "aes_gcm":
+                if config.sig_algorithm:
+                    if not public_pem or not active_signature:
+                        raise ValueError(
+                            "Detached signature and matching public key are required for AES-GCM verification"
+                        )
+                    result.sig_valid = verify(
+                        result.ciphertext,
+                        active_signature,
+                        public_pem,
+                        config.sig_algorithm,
+                    )
+                    result.sig_bytes = active_signature
+                    result.sig_size_bits = len(active_signature) * 8
+                    if not result.sig_valid:
+                        raise ValueError(
+                            "Signature verification failed — ciphertext may have been tampered"
+                        )
                 dec_m = measure_operation(
-                    aes_gcm_engine.decrypt, result.ciphertext, aes_key,
-                    input_size_bytes=len(result.ciphertext)
+                    aes_gcm_engine.decrypt,
+                    result.ciphertext,
+                    aes_key,
+                    input_size_bytes=len(result.ciphertext),
                 )
                 result.decrypted = dec_m.result
-                result.sig_valid = True
-                result.sig_bytes = b""
-                result.sig_size_bits = 0
             elif config.algorithm == "chacha20_poly1305":
+                if config.sig_algorithm:
+                    if not public_pem or not active_signature:
+                        raise ValueError(
+                            "Detached signature and matching public key are required for ChaCha20-Poly1305 verification"
+                        )
+                    result.sig_valid = verify(
+                        result.ciphertext,
+                        active_signature,
+                        public_pem,
+                        config.sig_algorithm,
+                    )
+                    result.sig_bytes = active_signature
+                    result.sig_size_bits = len(active_signature) * 8
+                    if not result.sig_valid:
+                        raise ValueError(
+                            "Signature verification failed — ciphertext may have been tampered"
+                        )
                 dec_m = measure_operation(
-                    chacha20_poly_engine.decrypt, result.ciphertext, chacha_key,
-                    input_size_bytes=len(result.ciphertext)
+                    chacha20_poly_engine.decrypt,
+                    result.ciphertext,
+                    chacha_key,
+                    input_size_bytes=len(result.ciphertext),
                 )
                 result.decrypted = dec_m.result
-                result.sig_valid = True
-                result.sig_bytes = b""
-                result.sig_size_bits = 0
             else:  # hybrid
                 dec_m = measure_operation(
-                    hybrid_engine.decrypt, result.ciphertext, aes_key, chacha_key,
-                    public_pem, config.sig_algorithm,
-                    input_size_bytes=len(result.ciphertext)
+                    hybrid_engine.decrypt,
+                    result.ciphertext,
+                    aes_key,
+                    chacha_key,
+                    public_pem,
+                    config.sig_algorithm,
+                    input_size_bytes=len(result.ciphertext),
                 )
                 dec_res = dec_m.result
                 result.decrypted = dec_res.plaintext
@@ -267,21 +372,38 @@ def run_operation(
             result.dec_time_ms = dec_m.elapsed_ms
             result.dec_ram_kb = dec_m.ram_kb
             result.dec_throughput_kbps = dec_m.throughput_kbps
+            result.decrypted_sha256 = sha256_hex(result.decrypted)
+
+            if config.operation == "both":
+                result.hash_match = result.plaintext_sha256 == result.decrypted_sha256
 
         # ── ENTROPY STAGES ───────────────────────
-        midpoint = len(data) // 2
-        result.entropy_plaintext = round(shannon_entropy(data), 4)
-        result.entropy_aes_half = round(shannon_entropy(data[:midpoint]), 4)
-        result.entropy_chacha_half = round(shannon_entropy(data[midpoint:]), 4)
-        result.entropy_final = round(shannon_entropy(result.ciphertext), 4)
+        if config.operation == "decrypt":
+            midpoint = len(result.decrypted) // 2
+            result.entropy_plaintext = round(shannon_entropy(result.decrypted), 4)
+            result.entropy_aes_half = round(
+                shannon_entropy(result.decrypted[:midpoint]), 4
+            )
+            result.entropy_chacha_half = round(
+                shannon_entropy(result.decrypted[midpoint:]), 4
+            )
+            result.entropy_final = round(shannon_entropy(result.ciphertext), 4)
+        else:
+            midpoint = len(data) // 2
+            result.entropy_plaintext = round(shannon_entropy(data), 4)
+            result.entropy_aes_half = round(shannon_entropy(data[:midpoint]), 4)
+            result.entropy_chacha_half = round(shannon_entropy(data[midpoint:]), 4)
+            result.entropy_final = round(shannon_entropy(result.ciphertext), 4)
 
         # ── CIPHERTEXT QUALITY ───────────────────
-        result.ciphertext_expansion_pct = ciphertext_expansion_pct(len(data), len(result.ciphertext))
+        result.ciphertext_expansion_pct = ciphertext_expansion_pct(
+            len(data), len(result.ciphertext)
+        )
         result.byte_freq_std_dev = round(_byte_freq_std_dev(result.ciphertext), 4)
         result.chi_squared = chi_squared_uniformity(result.ciphertext)
 
         # ── AVALANCHE EFFECT ─────────────────────
-        if len(data) >= 1:
+        if config.operation != "decrypt" and len(data) >= 1:
             try:
                 if config.algorithm == "aes_gcm":
                     avalanche_fn = lambda d, k: aes_gcm_engine.encrypt(d, k)
@@ -291,7 +413,9 @@ def run_operation(
                     result.avalanche = compute_avalanche(avalanche_fn, data, chacha_key)
                 else:  # hybrid — use AES-GCM half for avalanche (more deterministic)
                     avalanche_fn = lambda d, k: aes_gcm_engine.encrypt(d, k)
-                    result.avalanche = compute_avalanche(avalanche_fn, data[:max(1, len(data)//2)], aes_key)
+                    result.avalanche = compute_avalanche(
+                        avalanche_fn, data[: max(1, len(data) // 2)], aes_key
+                    )
             except Exception:
                 result.avalanche = None
 
@@ -302,7 +426,7 @@ def run_operation(
 
 
 # ──────────────────────────────────────────────
-# CSV Row Builder
+# JSONL Row Builder
 # ──────────────────────────────────────────────
 def build_and_log_row(
     config: EncryptionConfig,
@@ -313,12 +437,16 @@ def build_and_log_row(
     batch_id_val: str = "",
     iteration: int = 1,
 ) -> dict[str, Any]:
-    """Build a flat CSV row dict and append it to the log."""
+    """Build a flat research log row dict and append it to the JSONL log."""
     ext = Path(input_filename).suffix.lower()
     mime = mimetypes.guess_type(input_filename)[0] or "application/octet-stream"
 
     sig_key_str = config.sig_key_param if config.sig_algorithm else ""
-    sig_key_size = signature_key_size_bits(config.sig_algorithm or "", sig_key_str) if config.sig_algorithm else 0
+    sig_key_size = (
+        signature_key_size_bits(config.sig_algorithm or "", sig_key_str)
+        if config.sig_algorithm
+        else 0
+    )
 
     row: dict[str, Any] = {
         "id": op_id(),
@@ -328,8 +456,16 @@ def build_and_log_row(
         "operation": config.operation,
         "algorithm": config.algorithm,
         "sym_key_size_bits": config.sym_key_size_bits,
+        "aes_key_size_bits": config.sym_key_size_bits
+        if config.algorithm in {"aes_gcm", "hybrid"}
+        else "",
+        "chacha_key_size_bits": 256
+        if config.algorithm in {"chacha20_poly1305", "hybrid"}
+        else "",
         "sig_algorithm": config.sig_algorithm or "",
         "sig_key_param": sig_key_str,
+        "sig_key_size_bits": sig_key_size,
+        "memory_backend": memory_backend(),
         # Input
         "input_filename": input_filename,
         "input_extension": ext,
@@ -337,12 +473,27 @@ def build_and_log_row(
         "input_size_bytes": len(input_data),
         "input_size_kb": round(len(input_data) / 1024.0, 3),
         "input_file_category": file_category(ext),
-        "input_entropy": result.entropy_plaintext,
+        "input_entropy": round(shannon_entropy(input_data), 4),
         # Output
         "output_filename": output_filename,
-        "output_size_bytes": len(result.ciphertext),
-        "output_size_kb": round(len(result.ciphertext) / 1024.0, 3),
-        "output_entropy": result.entropy_final,
+        "output_size_bytes": len(result.decrypted)
+        if config.operation == "decrypt"
+        else len(result.ciphertext),
+        "output_size_kb": round(
+            (
+                len(result.decrypted)
+                if config.operation == "decrypt"
+                else len(result.ciphertext)
+            )
+            / 1024.0,
+            3,
+        ),
+        "output_entropy": round(
+            shannon_entropy(
+                result.decrypted if config.operation == "decrypt" else result.ciphertext
+            ),
+            4,
+        ),
         "ciphertext_expansion_pct": result.ciphertext_expansion_pct,
         # Performance
         "enc_time_ms": result.enc_time_ms,
@@ -357,6 +508,10 @@ def build_and_log_row(
         "chacha_key_entropy": result.chacha_key_entropy,
         "sig_size_bits": result.sig_size_bits,
         "sig_valid": result.sig_valid,
+        "plaintext_sha256": result.plaintext_sha256,
+        "ciphertext_sha256": result.ciphertext_sha256,
+        "decrypted_sha256": result.decrypted_sha256,
+        "hash_match": result.hash_match,
         # Entropy pipeline
         "entropy_plaintext": result.entropy_plaintext,
         "entropy_aes_half": result.entropy_aes_half,
@@ -364,9 +519,15 @@ def build_and_log_row(
         "entropy_final": result.entropy_final,
         # Avalanche
         "avalanche_pct": result.avalanche.bit_change_pct if result.avalanche else None,
-        "avalanche_bits_flipped": result.avalanche.bits_flipped if result.avalanche else None,
-        "avalanche_total_bits": result.avalanche.total_bits if result.avalanche else None,
-        "avalanche_deviation": result.avalanche.deviation_from_ideal if result.avalanche else None,
+        "avalanche_bits_flipped": result.avalanche.bits_flipped
+        if result.avalanche
+        else None,
+        "avalanche_total_bits": result.avalanche.total_bits
+        if result.avalanche
+        else None,
+        "avalanche_deviation": result.avalanche.deviation_from_ideal
+        if result.avalanche
+        else None,
         # Randomness
         "byte_freq_std_dev": result.byte_freq_std_dev,
         "chi_squared": result.chi_squared,

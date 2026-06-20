@@ -4,19 +4,22 @@ Uses time.perf_counter for wall-clock timing and psutil for RAM measurement.
 psutil gives accurate OS-level RSS measurements, unlike tracemalloc which
 only tracks Python-level allocations.
 """
+
 from __future__ import annotations
 
 import time
+import tracemalloc
 from dataclasses import dataclass
 from typing import Any, Callable
 
 try:
-    import psutil
     import os as _os
+
+    import psutil
+
     _PROC = psutil.Process(_os.getpid())
     _PSUTIL_AVAILABLE = True
 except ImportError:
-    import tracemalloc
     _PSUTIL_AVAILABLE = False
 
 
@@ -46,7 +49,13 @@ def _get_ram_kb() -> float:
     return 0.0
 
 
-def measure_operation(fn: Callable[..., Any], *args: Any, input_size_bytes: int = 0, **kwargs: Any) -> OperationMetrics:
+def memory_backend() -> str:
+    return "psutil_rss" if _PSUTIL_AVAILABLE else "tracemalloc_peak"
+
+
+def measure_operation(
+    fn: Callable[..., Any], *args: Any, input_size_bytes: int = 0, **kwargs: Any
+) -> OperationMetrics:
     """Measure a single operation's time and RAM."""
     if _PSUTIL_AVAILABLE:
         ram_before = _get_ram_kb()
