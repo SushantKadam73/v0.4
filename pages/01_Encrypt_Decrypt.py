@@ -60,9 +60,19 @@ uploaded_key = st.file_uploader("Optional symmetric key (.key, 32 bytes)", type=
 input_name = "input.bin"
 input_data = b""
 
+payload_label = "Ciphertext / Payload" if mode == "Decrypt" else "Plaintext / Payload"
+
 if input_mode == "Text Input":
-    txt = st.text_area("Plaintext / Payload", height=180)
-    input_data = txt.encode("utf-8")
+    txt = st.text_area(payload_label, height=180, key="payload_text").strip()
+    if mode == "Decrypt" and txt:
+        # Decrypt expects raw bytes; accept the same HEX preview the app displays.
+        try:
+            input_data = bytes.fromhex(txt)
+        except ValueError:
+            st.error("Ciphertext HEX must contain an even number of hexadecimal characters.")
+            st.stop()
+    else:
+        input_data = txt.encode("utf-8")
     input_name = "inline.txt"
 else:
     up = st.file_uploader("Upload file", key="data_file")
@@ -170,7 +180,8 @@ if st.button(f"Run {mode}", type="primary"):
         col2.metric("Enc RAM (KB)", f"{artifacts.enc_ram_kb:.3f}")
         col2.metric("Dec RAM (KB)", f"{artifacts.dec_ram_kb:.3f}")
 
-        st.subheader("Ciphertext / Output HEX Preview")
+        output_heading = "Plaintext / Output HEX Preview" if mode == "Decrypt" else "Ciphertext / Output HEX Preview"
+        st.subheader(output_heading)
         st.code(to_hex_preview(output_data, 256))
 
         st.subheader("Entropy")
@@ -203,4 +214,10 @@ if st.button(f"Run {mode}", type="primary"):
             st.json(entry)
 
     except Exception as exc:
-        st.error(f"Operation failed: {exc}")
+        if mode == "Decrypt":
+            st.error(
+                "Decryption failed. Confirm the input is the exact output of a previous "
+                f"encryption and that the correct symmetric key is loaded. ({exc})"
+            )
+        else:
+            st.error(f"Operation failed: {exc}")

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-from analysis.security_metrics import key_entropy_score
+from analysis.security_metrics import is_low_entropy_key, key_entropy_score
 from crypto import chacha20_engine
 from crypto.key_generator import generate_ecdsa_keypair, generate_rsa_keypair, generate_symmetric_key
 
@@ -26,8 +26,8 @@ if st.button("Generate", type="primary"):
         entropy = key_entropy_score(key)
         st.code(key.hex())
         st.metric("Key entropy", f"{entropy:.4f}")
-        if entropy < 7.0:
-            st.warning("Weak randomness warning: entropy < 7.0")
+        if is_low_entropy_key(key):
+            st.warning("Weak randomness warning: low entropy key")
         st.download_button("Download .key", key, file_name=f"{key_type.lower().replace('-', '_')}.key")
     elif key_type == "ECDSA (P-256)":
         pair = generate_ecdsa_keypair()

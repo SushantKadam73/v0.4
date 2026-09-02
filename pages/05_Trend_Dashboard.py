@@ -18,7 +18,9 @@ if not rows:
     st.stop()
 
 raw_df = pd.json_normalize(rows)
-raw_df["timestamp"] = pd.to_datetime(raw_df["timestamp"], errors="coerce")
+# Logged timestamps carry a Z suffix and parse as tz-aware; the date filter
+# below builds naive Timestamps, so drop the tz to keep comparisons valid.
+raw_df["timestamp"] = pd.to_datetime(raw_df["timestamp"], errors="coerce", utc=True).dt.tz_localize(None)
 raw_df["file_type"] = raw_df["input.extension"].fillna("").apply(classify_extension)
 
 algos = sorted(raw_df["algorithm"].dropna().unique().tolist())
