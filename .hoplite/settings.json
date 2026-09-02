@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "ports": {"default": 3000, "preview": 3000, "additional": {"app": 3000}},
+  "scripts": {
+    "setup": {
+      "enabled": true,
+      "command": "python3 -m venv .venv && .venv/bin/pip install -r requirements.txt"
+    },
+    "run": {
+      "enabled": true,
+      "command": ".venv/bin/python -m streamlit run app.py --server.port 3000 --server.headless true"
+    },
+    "archive": {"enabled": true, "command": null},
+    "check": {"enabled": true, "command": null}
+  },
+  "mcpServers": []
+}

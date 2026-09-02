@@ -5,7 +5,7 @@ import streamlit as st
 
 from analysis.avalanche import bit_difference_map, bit_difference_percentage, flip_one_bit
 from analysis.entropy import byte_frequency, entropy_label, shannon_entropy
-from analysis.security_metrics import is_all_zero_key, is_non_standard_key_size
+from analysis.security_metrics import is_all_zero_key, is_low_entropy_key, is_non_standard_key_size
 from crypto import aes_engine, chacha20_engine, hybrid_engine
 from crypto.key_generator import generate_symmetric_key
 from lab_core import to_hex_preview
@@ -73,8 +73,8 @@ with tab2:
         st.write(f"Entropy: {ent:.4f}")
         if is_all_zero_key(key_bytes):
             st.error("Weakness: all-zero key")
-        if ent < 7.0:
-            st.warning("Weakness: entropy < 7.0")
+        if is_low_entropy_key(key_bytes):
+            st.warning("Weakness: low entropy key")
         if is_non_standard_key_size(key_bytes, {16, 24, 32}):
             st.warning("Weakness: non-standard key size")
 
